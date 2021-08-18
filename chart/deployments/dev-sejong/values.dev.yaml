@@ -1,9 +1,8 @@
 networkName: sejong
-
 deployment:
   image:
     repository: 868027517775.dkr.ecr.us-west-2.amazonaws.com/icon-logs
-    tag: '32'
+    tag: '12'
     pullPolicy: IfNotPresent
   replicaCount: 1
   annotations: |
