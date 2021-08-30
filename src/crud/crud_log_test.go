@@ -43,7 +43,7 @@ func TestLogModelInsert(t *testing.T) {
 	}
 }
 
-func TestLogModelSelect(t *testing.T) {
+func TestLogModelSelectMany(t *testing.T) {
 	assert := assert.New(t)
 
 	logModel := GetLogModel()
@@ -58,45 +58,30 @@ func TestLogModelSelect(t *testing.T) {
 		assert.Equal(nil, insertErr)
 	}
 
-	// Select all logs
-	logs, err := logModel.Select(len(logFixtures), 0, "")
+	// SelectMany all logs
+	logs, _, err := logModel.SelectMany(len(logFixtures), 0, "", "")
 	assert.Equal(len(logFixtures), len(logs))
 	assert.Equal(nil, err)
 
 	// Test limit
-	logs, err = logModel.Select(1, 0, "")
+	logs, _, err = logModel.SelectMany(1, 0, "", "")
 	assert.Equal(1, len(logs))
 	assert.Equal(nil, err)
 
 	// Test skip
-	logs, err = logModel.Select(1, 1, "")
+	logs, _, err = logModel.SelectMany(1, 1, "", "")
 	assert.Equal(1, len(logs))
 	assert.Equal(nil, err)
 
 	// Test txHash
-	logs, err = logModel.Select(1, 1, "0xc34fc0c061a6ad5f6eef087f3dae7b633a40bac1b7697ee528eb3f5861daecbe")
+	logs, _, err = logModel.SelectMany(1, 1, "0xc34fc0c061a6ad5f6eef087f3dae7b633a40bac1b7697ee528eb3f5861daecbe", "")
 	assert.Equal(1, len(logs))
 	assert.Equal(nil, err)
-}
 
-func TestLogModelCountAll(t *testing.T) {
-	assert := assert.New(t)
-
-	logModel := GetLogModel()
-	assert.NotEqual(nil, logModel)
-
-	migrateErr := logModel.Migrate()
-	assert.Equal(nil, migrateErr)
-
-	// Load fixtures
-	logFixtures := fixtures.LoadLogFixtures()
-	for _, log := range logFixtures {
-		insertErr := logModel.Insert(log)
-		assert.Equal(nil, insertErr)
-	}
-
-	count := logModel.CountAll()
-	assert.NotEqual(0, count)
+	// Test scoreAddr
+	logs, _, err = logModel.SelectMany(1, 1, "", "cx38fd2687b202caf4bd1bda55223578f39dbb6561")
+	assert.Equal(1, len(logs))
+	assert.Equal(nil, err)
 }
 
 func TestLogModelLoader(t *testing.T) {
@@ -109,7 +94,7 @@ func TestLogModelLoader(t *testing.T) {
 	logFixtures := fixtures.LoadLogFixtures()
 
 	// Start loader
-	go StartLogLoader()
+	StartLogLoader()
 
 	// Write to loader channel
 	go func() {
@@ -121,8 +106,8 @@ func TestLogModelLoader(t *testing.T) {
 	// Wait for inserts
 	time.Sleep(5)
 
-	// Select all logs
-	logs, err := logModel.Select(len(logFixtures), 0, "")
+	// SelectMany all logs
+	logs, _, err := logModel.SelectMany(len(logFixtures), 0, "", "")
 	assert.Equal(len(logFixtures), len(logs))
 	assert.Equal(nil, err)
 }

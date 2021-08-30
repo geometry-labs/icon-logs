@@ -1,21 +1,23 @@
 package rest
 
 import (
-  "strconv"
 	"encoding/json"
+	"strconv"
 
 	fiber "github.com/gofiber/fiber/v2"
 	"go.uber.org/zap"
 
 	"github.com/geometry-labs/icon-logs/config"
 	"github.com/geometry-labs/icon-logs/crud"
+	"github.com/geometry-labs/icon-logs/models"
 )
 
 type LogsQuery struct {
 	Limit int `query:"limit"`
 	Skip  int `query:"skip"`
 
-  TransactionHash string `query:"transaction_hash"`
+	TransactionHash string `query:"transaction_hash"`
+	ScoreAddress    string `query:"score_address"`
 }
 
 func LogsAddHandlers(app *fiber.App) {
@@ -35,6 +37,7 @@ func LogsAddHandlers(app *fiber.App) {
 // @Param limit query int false "amount of records"
 // @Param skip query int false "skip to a record"
 // @Param transaction_hash query string false "find by transaction hash"
+// @Param score_address query string false "find by score address"
 // @Router /api/v1/logs [get]
 // @Success 200 {object} []models.Log
 // @Failure 422 {object} map[string]interface{}
@@ -52,25 +55,47 @@ func handlerGetLogs(c *fiber.Ctx) error {
 		params.Limit = 1
 	}
 
+	// Check Params
+	if params.Limit < 1 || params.Limit > config.Config.MaxPageSize {
+		c.Status(422)
+		return c.SendString(`{"error": "limit must be greater than 0 and less than 101"}`)
+	}
+
 	// Get Logs
-	logs, err := crud.GetLogModel().Select(
+	logs, count, err := crud.GetLogModel().SelectMany(
 		params.Limit,
 		params.Skip,
 		params.TransactionHash,
+		params.ScoreAddress,
 	)
-  if err != nil {
-	  zap.S().Warnf("Logs CRUD ERROR: %s", err.Error())
-    c.Status(500)
+	if err != nil {
+		zap.S().Warnf("Logs CRUD ERROR: %s", err.Error())
+		c.Status(500)
 		return c.SendString(`{"error": "could not retrieve logs"}`)
-  }
+	}
 
 	if len(logs) == 0 {
 		// No Content
 		c.Status(204)
 	}
 
-  // Set headers
-  c.Append("X-TOTAL-COUNT", strconv.FormatInt(crud.GetLogModel().CountAll(), 10))
+	// Set X-TOTAL-COUNT
+	if count != -1 {
+		// Filters given, count some
+		c.Append("X-TOTAL-COUNT", strconv.FormatInt(count, 10))
+	} else {
+		// No filters given, count all
+		// Total count in the log_counts table
+		counter, err := crud.GetLogCountModel().Select()
+		if err != nil {
+			counter = models.LogCount{
+				Count: 0,
+				Id:    0,
+			}
+			zap.S().Warn("Could not retrieve log count: ", err.Error())
+		}
+		c.Append("X-TOTAL-COUNT", strconv.FormatUint(counter.Count, 10))
+	}
 
 	body, _ := json.Marshal(&logs)
 	return c.SendString(string(body))

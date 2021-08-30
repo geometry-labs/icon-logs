@@ -21,6 +21,9 @@ type configType struct {
 	HealthPrefix    string `envconfig:"HEALTH_PREFIX" required:"false" default:"/health"`
 	MetricsPrefix   string `envconfig:"METRICS_PREFIX" required:"false" default:"/metrics"`
 
+	// CORS
+	CORSAllowOrigins string `envconfig:"CORS_ALLOW_ORIGINS" required:"false" default:"*"`
+
 	// Monitoring
 	HealthPollingInterval int `envconfig:"HEALTH_POLLING_INTERVAL" required:"false" default:"10"`
 
@@ -36,14 +39,16 @@ type configType struct {
 	KafkaGroupID      string `envconfig:"KAFKA_GROUP_ID" required:"false" default:"logs-service"`
 
 	// Topics
-	ConsumerGroup    string            `envconfig:"CONSUMER_GROUP" required:"false" default:"logs-consumer-group"`
-	ConsumerTopics   []string          `envconfig:"CONSUMER_TOPICS" required:"false" default:"logs"`
-	ProducerTopics   []string          `envconfig:"PRODUCER_TOPICS" required:"false" default:"logs-ws"`
-	SchemaNameTopics map[string]string `envconfig:"SCHEMA_NAME_TOPICS" required:"false" default:"logs-ws:logs"`
-	SchemaFolderPath string            `envconfig:"SCHEMA_FOLDER_PATH" required:"false" default:"schemas/"`
+	ConsumerGroup             string            `envconfig:"CONSUMER_GROUP" required:"false" default:"logs-consumer-group"`
+	ConsumerTopicBlocks       string            `envconfig:"CONSUMER_TOPIC_BLOCKS" required:"false" default:"blocks"`
+	ConsumerTopicTransactions string            `envconfig:"CONSUMER_TOPIC_TRANSACTIONS" required:"false" default:"transactions"`
+	ConsumerTopicLogs         string            `envconfig:"CONSUMER_TOPIC_LOGS" required:"false" default:"logs"`
+	ProducerTopics            []string          `envconfig:"PRODUCER_TOPICS" required:"false" default:"logs-ws"`
+	SchemaNameTopics          map[string]string `envconfig:"SCHEMA_NAME_TOPICS" required:"false" default:"logs-ws:logs"`
+	SchemaFolderPath          string            `envconfig:"SCHEMA_FOLDER_PATH" required:"false" default:"schemas/"`
 
 	// DB
-  DbDriver   string `envconfig:"DB_DRIVER" required:"false" default:"postgres"`
+	DbDriver   string `envconfig:"DB_DRIVER" required:"false" default:"postgres"`
 	DbHost     string `envconfig:"DB_HOST" required:"false" default:"localhost"`
 	DbPort     string `envconfig:"DB_PORT" required:"false" default:"5432"`
 	DbUser     string `envconfig:"DB_USER" required:"false" default:"postgres"`
@@ -53,9 +58,7 @@ type configType struct {
 	DbTimezone string `envconfig:"DB_TIMEZONE" required:"false" default:"UTC"`
 
 	// Endpoints
-	MaxPageSize    int `envconfig:"MAX_PAGE_SIZE" required:"false" default:"100"`
-	MinPageSize    int `envconfig:"MIN_PAGE_SIZE" required:"false" default:"10"`
-	RequestTimeout int `envconfig:"REQUEST_TIMEOUT" required:"false" default:"10"`
+	MaxPageSize int `envconfig:"MAX_PAGE_SIZE" required:"false" default:"100"`
 }
 
 var Config configType

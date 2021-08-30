@@ -1,18 +1,15 @@
 package transformers
 
 import (
-  "encoding/hex"
+	"encoding/hex"
 
-	"go.uber.org/zap"
-	"gopkg.in/Shopify/sarama.v1"
 	"github.com/golang/protobuf/proto"
-	"google.golang.org/protobuf/encoding/protojson"
+	"go.uber.org/zap"
 
 	"github.com/geometry-labs/icon-logs/config"
 	"github.com/geometry-labs/icon-logs/crud"
 	"github.com/geometry-labs/icon-logs/kafka"
 	"github.com/geometry-labs/icon-logs/models"
-	"github.com/geometry-labs/icon-logs/worker/utils"
 )
 
 func StartLogsTransformer() {
@@ -20,66 +17,42 @@ func StartLogsTransformer() {
 }
 
 func logsTransformer() {
-  consumer_topic_name := "logs"
-	producer_topic_name := "logs-ws"
+	consumerTopicNameLogs := config.Config.ConsumerTopicLogs
 
-	// Check topic names
-	if utils.StringInSlice(consumer_topic_name , config.Config.ConsumerTopics) == false {
-		zap.S().Panic("Logs Worker: no ", consumer_topic_name, " topic found in CONSUMER_TOPICS=", config.Config.ConsumerTopics)
-	}
-	if utils.StringInSlice(producer_topic_name, config.Config.ProducerTopics) == false {
-		zap.S().Panic("Logs Worker: no ", producer_topic_name, " topic found in PRODUCER_TOPICS=", config.Config.ConsumerTopics)
-	}
+	// Input Channels
+	consumerTopicChanLogs := kafka.KafkaTopicConsumers[consumerTopicNameLogs].TopicChan
 
-	consumer_topic_chan := make(chan *sarama.ConsumerMessage)
-	producer_topic_chan := kafka.KafkaTopicProducers[producer_topic_name].TopicChan
-	mongoLoaderChan := crud.GetLogModel().WriteChan
-
-	// Register consumer channel logs
-	broadcaster_output_chan_id_log := kafka.Broadcasters[consumer_topic_name].AddBroadcastChannel(consumer_topic_chan)
-	defer func() {
-		kafka.Broadcasters[consumer_topic_name].RemoveBroadcastChannel(broadcaster_output_chan_id_log)
-	}()
+	// Output channels
+	logLoaderChan := crud.GetLogModel().WriteChan
+	logCountLoaderChan := crud.GetLogCountModel().WriteChan
 
 	zap.S().Debug("Logs Worker: started working")
 	for {
 		// Read from kafka
-		consumer_topic_msg := <-consumer_topic_chan
+		consumerTopicMsg := <-consumerTopicChanLogs
 
-    // Log message from ETL
-    logRaw, err := convertBytesToLogRawProtoBuf(consumer_topic_msg.Value)
-    if err != nil {
-      zap.S().Fatal("Logs Worker: Unable to proceed cannot convert kafka msg value to LogRaw, err: ", err.Error())
-    }
-
-    // Transform logic
-    var transformedLog *models.Log
-    transformedLog = transformLogRaw(logRaw)
-
-		// Produce to Kafka
-		producer_topic_msg := &sarama.ProducerMessage{
-			Topic: producer_topic_name,
-			Key:   sarama.ByteEncoder(consumer_topic_msg.Key),
-			Value: sarama.ByteEncoder(consumer_topic_msg.Value),
+		// Log message from ETL
+		logRaw, err := convertBytesToLogRawProtoBuf(consumerTopicMsg.Value)
+		if err != nil {
+			zap.S().Fatal("Logs Worker: Unable to proceed cannot convert kafka msg value to LogRaw, err: ", err.Error())
 		}
-		producer_topic_chan <- producer_topic_msg
 
-		// Load to Postgres
-		mongoLoaderChan <- transformedLog
+		// Transform logic
+		var transformedLog *models.Log
+		transformedLog = transformLogRaw(logRaw)
 
-		zap.S().Debug("Logs worker: last seen log #", string(consumer_topic_msg.Key))
+		// Load log to Postgres
+		logLoaderChan <- transformedLog
+
+		// Load log counter to Postgres
+		logCount := &models.LogCount{
+			Count: 1, // Adds with current
+			Id:    1, // Only one row
+		}
+		logCountLoaderChan <- logCount
+
+		zap.S().Debug("Logs worker: last seen log #", string(consumerTopicMsg.Key))
 	}
-}
-
-func convertBytesToLogRawJSON(value []byte) (*models.LogRaw, error) {
-	log := models.LogRaw{}
-
-	err := protojson.Unmarshal(value, &log)
-	if err != nil {
-    zap.S().Panic("Error: ", err.Error(), " Value: ", string(value))
-	}
-
-	return &log, nil
 }
 
 func convertBytesToLogRawProtoBuf(value []byte) (*models.LogRaw, error) {
@@ -94,18 +67,18 @@ func convertBytesToLogRawProtoBuf(value []byte) (*models.LogRaw, error) {
 
 // Business logic goes here
 func transformLogRaw(logRaw *models.LogRaw) *models.Log {
-  return &models.Log {
-    Type: logRaw.Type,
-    LogIndex: logRaw.LogIndex,
-    TransactionHash: logRaw.TransactionHash,
-    TransactionIndex: logRaw.TransactionIndex,
-    Address: logRaw.Address,
-    Data: logRaw.Data,
-    Indexed: logRaw.Indexed,
-    BlockNumber: logRaw.BlockNumber,
-    BlockTimestamp: logRaw.BlockTimestamp,
-    BlockHash: logRaw.BlockHash,
-    ItemId: logRaw.ItemId,
-    ItemTimestamp: logRaw.ItemTimestamp,
-  }
+	return &models.Log{
+		Type:             logRaw.Type,
+		LogIndex:         logRaw.LogIndex,
+		TransactionHash:  logRaw.TransactionHash,
+		TransactionIndex: logRaw.TransactionIndex,
+		Address:          logRaw.Address,
+		Data:             logRaw.Data,
+		Indexed:          logRaw.Indexed,
+		BlockNumber:      logRaw.BlockNumber,
+		BlockTimestamp:   logRaw.BlockTimestamp,
+		BlockHash:        logRaw.BlockHash,
+		ItemId:           logRaw.ItemId,
+		ItemTimestamp:    logRaw.ItemTimestamp,
+	}
 }
