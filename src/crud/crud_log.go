@@ -78,7 +78,7 @@ func (m *LogModel) SelectMany(
 	scoreAddr string,
 ) ([]models.Log, int64, error) {
 	db := m.db
-	computeCount := false
+	//computeCount := false
 
 	// Set table
 	db = db.Model(&models.Log{})
@@ -88,21 +88,21 @@ func (m *LogModel) SelectMany(
 
 	// Hash
 	if txHash != "" {
-		computeCount = true
+		//computeCount = true
 		db = db.Where("transaction_hash = ?", txHash)
 	}
 
 	// Address
 	if scoreAddr != "" {
-		computeCount = true
+		//computeCount = true
 		db = db.Where("address = ?", scoreAddr)
 	}
 
 	// Count, if needed
 	count := int64(-1)
-	if computeCount {
-		db.Count(&count)
-	}
+	//if computeCount {
+	//	db.Count(&count)
+	//}
 
 	// Limit is required and defaulted to 1
 	// Note: Count before setting limit
