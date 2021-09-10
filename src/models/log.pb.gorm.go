@@ -21,18 +21,18 @@ var _ = fmt.Errorf
 var _ = math.Inf
 
 type LogORM struct {
-	Address          string `gorm:"index:idx_address"`
+	Address          string `gorm:"index:log_idx_address"`
 	BlockHash        string
-	BlockNumber      uint64 `gorm:"index:idx_block_number"`
+	BlockNumber      uint64 `gorm:"index:log_idx_block_number"`
 	BlockTimestamp   uint64
 	Data             string
 	Id               uint64
 	Indexed          string
 	ItemId           string
 	ItemTimestamp    string
-	LogIndex         uint64 `gorm:"index:idx_log_index"`
+	LogIndex         uint64 `gorm:"index:log_idx_log_index"`
 	Method           string
-	TransactionHash  string `gorm:"index:idx_transaction_hash"`
+	TransactionHash  string `gorm:"index:log_idx_transaction_hash"`
 	TransactionIndex uint32
 	Type             string
 }

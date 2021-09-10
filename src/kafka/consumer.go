@@ -11,9 +11,10 @@ import (
 )
 
 type kafkaTopicConsumer struct {
-	brokerURL string
-	topicName string
-	TopicChan chan *sarama.ConsumerMessage
+	brokerURL   string
+	topicName   string
+	TopicChan   chan *sarama.ConsumerMessage
+	startOffset int64
 }
 
 var KafkaTopicConsumers map[string]*kafkaTopicConsumer
@@ -44,13 +45,28 @@ func startKafkaTopicConsumer(topicName string) {
 		make(chan *sarama.ConsumerMessage),
 	}
 
-	// One routine per topic
-	go KafkaTopicConsumers[topicName].consumeGroup(consumerGroup)
+	// TODO BUG Need to seperate ConsumeClaim function for the 3 types of consumers and push to on channel for transformer
+
+	// Start from 0 and commit offsets
+	go KafkaTopicConsumers[topicName].consumeGroup(consumerGroup+"-COMMIT", sarama.OffsetOldest)
+
+	// Start from 0 always
+	go KafkaTopicConsumers[topicName].consumeGroup(consumerGroup+"-TAIL", 0)
+
+	// Start from latest messages always
+	go KafkaTopicConsumers[topicName].consumeGroup(consumerGroup+"-HEAD", sarama.OffsetNewest)
 
 	zap.S().Info("Start Consumer: kafkaBroker=", kafkaBroker, " consumerTopics=", topicName, " consumerGroup=", consumerGroup)
 }
 
 // Used internally by Sarama
+type kafkaGroupConsumer struct {
+	brokerURL   string
+	topicName   string
+	TopicChan   chan *sarama.ConsumerMessage
+	startOffset int64
+}
+
 func (*kafkaTopicConsumer) Setup(_ sarama.ConsumerGroupSession) error   { return nil }
 func (*kafkaTopicConsumer) Cleanup(_ sarama.ConsumerGroupSession) error { return nil }
 func (k *kafkaTopicConsumer) ConsumeClaim(sess sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
@@ -67,7 +83,10 @@ func (k *kafkaTopicConsumer) ConsumeClaim(sess sarama.ConsumerGroupSession, clai
 		zap.S().Debug("New Kafka Consumer Group Message: offset=", topicMsg.Offset, " key=", string(topicMsg.Key))
 
 		// Commit offset
-		sess.MarkMessage(topicMsg, "")
+		if k.startOffset == 0 {
+			// If startOffset is 0, never commit an offset
+			sess.MarkMessage(topicMsg, "")
+		}
 
 		// Broadcast
 		k.TopicChan <- topicMsg
@@ -77,7 +96,7 @@ func (k *kafkaTopicConsumer) ConsumeClaim(sess sarama.ConsumerGroupSession, clai
 	return nil
 }
 
-func (k *kafkaTopicConsumer) consumeGroup(group string) {
+func (k *kafkaTopicConsumer) consumeGroup(group string, startOffset int64) {
 	version, err := sarama.ParseKafkaVersion("2.1.1")
 	if err != nil {
 		zap.S().Panic("CONSUME GROUP ERROR: parsing Kafka version: ", err.Error())
@@ -86,7 +105,11 @@ func (k *kafkaTopicConsumer) consumeGroup(group string) {
 	saramaConfig := sarama.NewConfig()
 	saramaConfig.Version = version
 	saramaConfig.Consumer.Group.Rebalance.Strategy = sarama.BalanceStrategyRoundRobin
-	saramaConfig.Consumer.Offsets.Initial = sarama.OffsetOldest
+	if startOffset != 0 {
+		saramaConfig.Consumer.Offsets.Initial = startOffset
+	} else {
+		saramaConfig.Consumer.Offsets.Initial = sarama.OffsetOldest
+	}
 
 	var consumerGroup sarama.ConsumerGroup
 	ctx, cancel := context.WithCancel(context.Background())

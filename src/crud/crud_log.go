@@ -1,9 +1,9 @@
 package crud
 
 import (
+	"errors"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"go.uber.org/zap"
@@ -69,6 +69,26 @@ func (m *LogModel) Insert(log *models.Log) error {
 	return err
 }
 
+// UpdateOne - select from logs table
+func (m *LogModel) UpdateOne(
+	log *models.Log,
+) error {
+	db := m.db
+
+	// Set table
+	db = db.Model(&[]models.Log{})
+
+	// Transaction Hash
+	db = db.Where("transaction_hash = ?", log.TransactionHash)
+
+	// Log Index
+	db = db.Where("log_index = ?", log.LogIndex)
+
+	db = db.Save(log)
+
+	return db.Error
+}
+
 // Select - select from logs table
 // Returns: models, total count (if filters), error (if present)
 func (m *LogModel) SelectMany(
@@ -76,9 +96,9 @@ func (m *LogModel) SelectMany(
 	skip int,
 	txHash string,
 	scoreAddr string,
-) ([]models.Log, int64, error) {
+) (*[]models.Log, int64, error) {
 	db := m.db
-	//computeCount := false
+	computeCount := false
 
 	// Set table
 	db = db.Model(&models.Log{})
@@ -88,21 +108,21 @@ func (m *LogModel) SelectMany(
 
 	// Hash
 	if txHash != "" {
-		//computeCount = true
+		computeCount = true
 		db = db.Where("transaction_hash = ?", txHash)
 	}
 
 	// Address
 	if scoreAddr != "" {
-		//computeCount = true
+		// NOTE: addresses many have large counts, use log_count_by_addresses
 		db = db.Where("address = ?", scoreAddr)
 	}
 
 	// Count, if needed
 	count := int64(-1)
-	//if computeCount {
-	//	db.Count(&count)
-	//}
+	if computeCount {
+		db.Count(&count)
+	}
 
 	// Limit is required and defaulted to 1
 	// Note: Count before setting limit
@@ -114,8 +134,8 @@ func (m *LogModel) SelectMany(
 		db = db.Offset(skip)
 	}
 
-	logs := []models.Log{}
-	db = db.Find(&logs)
+	logs := &[]models.Log{}
+	db = db.Find(logs)
 
 	return logs, count, db.Error
 }
@@ -123,7 +143,7 @@ func (m *LogModel) SelectMany(
 func (m *LogModel) SelectOne(
 	txHash string,
 	logIndex uint64,
-) (models.Log, error) {
+) (*models.Log, error) {
 	db := m.db
 
 	// Set table
@@ -133,8 +153,8 @@ func (m *LogModel) SelectOne(
 
 	db = db.Where("log_index = ?", logIndex)
 
-	log := models.Log{}
-	db = db.First(&log)
+	log := &models.Log{}
+	db = db.First(log)
 
 	return log, db.Error
 }
@@ -148,43 +168,17 @@ func StartLogLoader() {
 			// Read transaction
 			newLog := <-postgresLoaderChan
 
-			// Load transaction to database
-			GetLogModel().Insert(newLog)
-
-			// Check current state
-			for {
-				// Wait for postgres to set state before processing more messages
-
-				checkLog, err := GetLogModel().SelectOne(newLog.TransactionHash, newLog.LogIndex)
-				if err != nil {
-					zap.S().Warn("State check error: ", err.Error())
-					zap.S().Warn("Waiting 100ms...")
-					time.Sleep(100 * time.Millisecond)
-					continue
-				}
-
-				// check all fields
-				if checkLog.Type == newLog.Type &&
-					checkLog.LogIndex == newLog.LogIndex &&
-					checkLog.TransactionHash == newLog.TransactionHash &&
-					checkLog.TransactionIndex == newLog.TransactionIndex &&
-					checkLog.Address == newLog.Address &&
-					checkLog.Data == newLog.Data &&
-					checkLog.Indexed == newLog.Indexed &&
-					checkLog.BlockNumber == newLog.BlockNumber &&
-					checkLog.BlockTimestamp == newLog.BlockTimestamp &&
-					checkLog.BlockHash == newLog.BlockHash &&
-					checkLog.ItemId == newLog.ItemId &&
-					checkLog.ItemTimestamp == newLog.ItemTimestamp {
-					// Success
-					break
-				} else {
-					// Wait
-					zap.S().Warn("Models did not match")
-					zap.S().Warn("Waiting 100ms...")
-					time.Sleep(100 * time.Millisecond)
-					continue
-				}
+			// Update/Insert
+			_, err := GetLogModel().SelectOne(newLog.TransactionHash, newLog.LogIndex)
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				// Insert
+				GetLogModel().Insert(newLog)
+			} else if err == nil {
+				// Update
+				GetLogModel().UpdateOne(newLog)
+			} else {
+				// Postgress error
+				zap.S().Fatal(err.Error())
 			}
 
 			zap.S().Debugf("Loader Log: Loaded in postgres table Logs, Block Number: %d", newLog.BlockNumber)
