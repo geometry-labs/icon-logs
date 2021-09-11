@@ -2,10 +2,8 @@ package crud
 
 import (
 	"errors"
-	"strings"
 	"sync"
 
-	"github.com/cenkalti/backoff/v4"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
@@ -57,35 +55,12 @@ func (m *LogCountByAddressModel) Migrate() error {
 // Insert - Insert logCountByAddress into table
 func (m *LogCountByAddressModel) Insert(logCountByAddress *models.LogCountByAddress) error {
 
-	err := backoff.Retry(func() error {
-		query := m.db.Create(logCountByAddress)
-		if query.Error != nil && !strings.Contains(query.Error.Error(), "duplicate key value violates unique constraint") {
-			zap.S().Warn("POSTGRES Insert Error : ", query.Error.Error())
-			return query.Error
-		}
-
-		return nil
-	}, backoff.NewExponentialBackOff())
-
-	return err
-}
-
-func (m *LogCountByAddressModel) Update(logCountByAddress *models.LogCountByAddress) error {
-
 	db := m.db
-	//computeCount := false
 
 	// Set table
 	db = db.Model(&models.LogCountByAddress{})
 
-	// Transaction Hash
-	db = db.Where("transaction_hash = ?", logCountByAddress.TransactionHash)
-
-	// Log Index
-	db = db.Where("log_index = ?", logCountByAddress.LogIndex)
-
-	// Update
-	db = db.Save(logCountByAddress)
+	db = db.Create(logCountByAddress)
 
 	return db.Error
 }
@@ -103,7 +78,7 @@ func (m *LogCountByAddressModel) SelectLargestCountByAddress(address string) (ui
 
 	// Get max count
 	count := uint64(0)
-	row := db.Select("max(count)").Row()
+	row := db.Select("max(id)").Row()
 	row.Scan(&count)
 
 	return count, db.Error
@@ -130,6 +105,26 @@ func (m *LogCountByAddressModel) SelectOne(transactionHash string, logIndex uint
 	return logCountByAddress, db.Error
 }
 
+func (m *LogCountByAddressModel) Update(logCountByAddress *models.LogCountByAddress) error {
+
+	db := m.db
+	//computeCount := false
+
+	// Set table
+	db = db.Model(&models.LogCountByAddress{})
+
+	// Transaction Hash
+	db = db.Where("transaction_hash = ?", logCountByAddress.TransactionHash)
+
+	// Log Index
+	db = db.Where("log_index = ?", logCountByAddress.LogIndex)
+
+	// Update
+	db = db.Save(logCountByAddress)
+
+	return db.Error
+}
+
 // StartLogCountByAddressLoader starts loader
 func StartLogCountByAddressLoader() {
 	go func() {
@@ -138,19 +133,8 @@ func StartLogCountByAddressLoader() {
 			// Read transaction
 			newLogCountByAddress := <-GetLogCountByAddressModel().WriteChan
 
-			// Read current state
-			curCount, err := GetLogCountByAddressModel().SelectLargestCountByAddress(
-				newLogCountByAddress.Address,
-			)
-			if err != nil {
-				zap.S().Fatal(err.Error())
-			}
-
-			// Add count
-			newLogCountByAddress.Count += curCount
-
 			// Insert
-			_, err = GetLogCountByAddressModel().SelectOne(
+			_, err := GetLogCountByAddressModel().SelectOne(
 				newLogCountByAddress.TransactionHash,
 				newLogCountByAddress.LogIndex,
 			)
@@ -160,12 +144,12 @@ func StartLogCountByAddressLoader() {
 				if err != nil {
 					zap.S().Fatal(err.Error())
 				}
+
+				zap.S().Debug("Loader=LogCountByAddress, TransactionHash=", newLogCountByAddress.TransactionHash, " LogIndex=", newLogCountByAddress.LogIndex, " - Insert")
 			} else if err != nil {
 				// Error
 				zap.S().Fatal(err.Error())
 			}
-
-			zap.S().Debugf("Loader LogCountByAddress: Loaded in postgres table LogCountByAddresss, Address: %s", newLogCountByAddress.Address)
 		}
 	}()
 }

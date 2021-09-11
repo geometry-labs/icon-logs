@@ -2,10 +2,9 @@ package crud
 
 import (
 	"errors"
-	"strings"
 	"sync"
+	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
@@ -55,36 +54,14 @@ func (m *LogModel) Migrate() error {
 
 // Insert - Insert log into table
 func (m *LogModel) Insert(log *models.Log) error {
-
-	err := backoff.Retry(func() error {
-		query := m.db.Create(log)
-		if query.Error != nil && !strings.Contains(query.Error.Error(), "duplicate key value violates unique constraint") {
-			zap.S().Warn("POSTGRES Insert Error : ", query.Error.Error())
-			return query.Error
-		}
-
-		return nil
-	}, backoff.NewExponentialBackOff())
-
-	return err
-}
-
-// UpdateOne - select from logs table
-func (m *LogModel) UpdateOne(
-	log *models.Log,
-) error {
 	db := m.db
 
 	// Set table
-	db = db.Model(&[]models.Log{})
+	db = db.Model(&models.Log{})
 
-	// Transaction Hash
-	db = db.Where("transaction_hash = ?", log.TransactionHash)
+	db = db.Create(log)
 
-	// Log Index
-	db = db.Where("log_index = ?", log.LogIndex)
-
-	db = db.Save(log)
+	zap.S().Debug("ALKJKLSJDKLJSLKDJSKLDJKLSDJKLSDJLKSDJKLSJDL: ", log.TransactionHash, " - ", log.LogIndex)
 
 	return db.Error
 }
@@ -159,6 +136,26 @@ func (m *LogModel) SelectOne(
 	return log, db.Error
 }
 
+// UpdateOne - select from logs table
+func (m *LogModel) UpdateOne(
+	log *models.Log,
+) error {
+	db := m.db
+
+	// Set table
+	db = db.Model(&models.Log{})
+
+	// Transaction Hash
+	db = db.Where("transaction_hash = ?", log.TransactionHash)
+
+	// Log Index
+	db = db.Where("log_index = ?", log.LogIndex)
+
+	db = db.Save(log)
+
+	return db.Error
+}
+
 // StartLogLoader starts loader
 func StartLogLoader() {
 	go func() {
@@ -171,17 +168,34 @@ func StartLogLoader() {
 			// Update/Insert
 			_, err := GetLogModel().SelectOne(newLog.TransactionHash, newLog.LogIndex)
 			if errors.Is(err, gorm.ErrRecordNotFound) {
+
 				// Insert
 				GetLogModel().Insert(newLog)
+
+				// Loop until verified
+				for true {
+
+					// Verify
+					_, err := GetLogModel().SelectOne(newLog.TransactionHash, newLog.LogIndex)
+					if errors.Is(err, gorm.ErrRecordNotFound) {
+						// Fail
+						time.Sleep(1)
+						continue
+					}
+
+					// Success
+					zap.S().Debug("Loader=Log, TransactionHash=", newLog.TransactionHash, " LogIndex=", newLog.LogIndex, " - Insert")
+					break
+				}
 			} else if err == nil {
 				// Update
 				GetLogModel().UpdateOne(newLog)
+				zap.S().Debug("Loader=Log, TransactionHash=", newLog.TransactionHash, " LogIndex=", newLog.LogIndex, " - Updated")
 			} else {
 				// Postgress error
 				zap.S().Fatal(err.Error())
 			}
 
-			zap.S().Debugf("Loader Log: Loaded in postgres table Logs, Block Number: %d", newLog.BlockNumber)
 		}
 	}()
 }

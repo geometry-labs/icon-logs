@@ -21,7 +21,6 @@ var _ = fmt.Errorf
 var _ = math.Inf
 
 type LogCountORM struct {
-	Count           uint64 `gorm:"index:log_count_idx_count"`
 	Id              uint64
 	LogIndex        uint64 `gorm:"index:log_count_idx_log_index"`
 	TransactionHash string `gorm:"index:log_count_idx_transaction_hash"`
@@ -44,7 +43,6 @@ func (m *LogCount) ToORM(ctx context.Context) (LogCountORM, error) {
 	}
 	to.TransactionHash = m.TransactionHash
 	to.LogIndex = m.LogIndex
-	to.Count = m.Count
 	to.Id = m.Id
 	if posthook, ok := interface{}(m).(LogCountWithAfterToORM); ok {
 		err = posthook.AfterToORM(ctx, &to)
@@ -64,7 +62,6 @@ func (m *LogCountORM) ToPB(ctx context.Context) (LogCount, error) {
 	}
 	to.TransactionHash = m.TransactionHash
 	to.LogIndex = m.LogIndex
-	to.Count = m.Count
 	to.Id = m.Id
 	if posthook, ok := interface{}(m).(LogCountWithAfterToPB); ok {
 		err = posthook.AfterToPB(ctx, &to)
@@ -382,10 +379,6 @@ func DefaultApplyFieldMaskLogCount(ctx context.Context, patchee *LogCount, patch
 		}
 		if f == prefix+"LogIndex" {
 			patchee.LogIndex = patcher.LogIndex
-			continue
-		}
-		if f == prefix+"Count" {
-			patchee.Count = patcher.Count
 			continue
 		}
 		if f == prefix+"Id" {

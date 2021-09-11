@@ -10,8 +10,8 @@ message LogCountByAddress {
   uint64 log_index = 1 [(gorm.field).tag = {index: "log_count_by_address_idx_log_index"}];
   string transaction_hash = 2 [(gorm.field).tag = {index: "log_count_by_address_idx_transaction_hash"}];
   string address = 3 [(gorm.field).tag = {index: "log_count_by_address_idx_address"}];
-  uint64 count = 4;
 
   // Postgres primary key
+  // Use as count
   uint64 id = 5;
 }

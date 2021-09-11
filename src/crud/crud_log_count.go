@@ -2,10 +2,8 @@ package crud
 
 import (
 	"errors"
-	"strings"
 	"sync"
 
-	"github.com/cenkalti/backoff/v4"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
@@ -55,37 +53,12 @@ func (m *LogCountModel) Migrate() error {
 
 // Insert - Insert logCount into table
 func (m *LogCountModel) Insert(logCount *models.LogCount) error {
-
-	err := backoff.Retry(func() error {
-		query := m.db.Create(logCount)
-
-		if query.Error != nil && !strings.Contains(query.Error.Error(), "duplicate key value violates unique constraint") {
-			zap.S().Warn("POSTGRES Insert Error : ", query.Error.Error())
-			return query.Error
-		}
-
-		return nil
-	}, backoff.NewExponentialBackOff())
-
-	return err
-}
-
-func (m *LogCountModel) Update(logCount *models.LogCount) error {
-
 	db := m.db
-	//computeCount := false
 
 	// Set table
 	db = db.Model(&models.LogCount{})
 
-	// Transaction Hash
-	db = db.Where("transaction_hash = ?", logCount.TransactionHash)
-
-	// Log Index
-	db = db.Where("log_index = ?", logCount.LogIndex)
-
-	// Update
-	db = db.Save(logCount)
+	db = db.Create(logCount)
 
 	return db.Error
 }
@@ -93,6 +66,9 @@ func (m *LogCountModel) Update(logCount *models.LogCount) error {
 // Select - select from logCounts table
 func (m *LogCountModel) SelectOne(transactionHash string, logIndex uint64) (models.LogCount, error) {
 	db := m.db
+
+	// Set table
+	db = db.Model(&models.LogCount{})
 
 	logCount := models.LogCount{}
 
@@ -115,12 +91,32 @@ func (m *LogCountModel) SelectLargestCount() (uint64, error) {
 	// Set table
 	db = db.Model(&models.LogCount{})
 
-	// Get max count
+	// Get max id
 	count := uint64(0)
-	row := db.Select("max(count)").Row()
+	row := db.Select("max(id)").Row()
 	row.Scan(&count)
 
 	return count, db.Error
+}
+
+func (m *LogCountModel) Update(logCount *models.LogCount) error {
+
+	db := m.db
+	//computeCount := false
+
+	// Set table
+	db = db.Model(&models.LogCount{})
+
+	// Transaction Hash
+	db = db.Where("transaction_hash = ?", logCount.TransactionHash)
+
+	// Log Index
+	db = db.Where("log_index = ?", logCount.LogIndex)
+
+	// Update
+	db = db.Save(logCount)
+
+	return db.Error
 }
 
 // StartLogCountLoader starts loader
@@ -131,17 +127,8 @@ func StartLogCountLoader() {
 			// Read logCount
 			newLogCount := <-GetLogCountModel().WriteChan
 
-			// Read current state
-			curCount, err := GetLogCountModel().SelectLargestCount()
-			if err != nil {
-				zap.S().Fatal(err.Error())
-			}
-
-			// Add count
-			newLogCount.Count += curCount
-
-			// Update/Insert
-			_, err = GetLogCountModel().SelectOne(
+			// Insert
+			_, err := GetLogCountModel().SelectOne(
 				newLogCount.TransactionHash,
 				newLogCount.LogIndex,
 			)
@@ -151,13 +138,12 @@ func StartLogCountLoader() {
 				if err != nil {
 					zap.S().Fatal(err.Error())
 				}
+
+				zap.S().Debug("Loader=LogCount, TransactionHash=", newLogCount.TransactionHash, " LogIndex=", newLogCount.LogIndex, " - Insert")
 			} else if err != nil {
 				// Error
 				zap.S().Fatal(err.Error())
 			}
-
-			zap.S().Debugf("Loader LogCount: Loaded in postgres table LogCounts, Hash: %s", newLogCount.TransactionHash)
-
 		}
 	}()
 }

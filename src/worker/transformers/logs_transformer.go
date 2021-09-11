@@ -126,7 +126,6 @@ func transformLogToLogCount(log *models.Log) *models.LogCount {
 	return &models.LogCount{
 		TransactionHash: log.TransactionHash,
 		LogIndex:        log.LogIndex,
-		Count:           1, // Add in loader
 	}
 }
 
@@ -135,6 +134,5 @@ func transformLogToLogCountByAddress(log *models.Log) *models.LogCountByAddress 
 		LogIndex:        log.LogIndex,
 		TransactionHash: log.TransactionHash,
 		Address:         log.Address,
-		Count:           1, // Add in loader
 	}
 }

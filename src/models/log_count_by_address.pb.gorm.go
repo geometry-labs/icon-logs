@@ -22,7 +22,6 @@ var _ = math.Inf
 
 type LogCountByAddressORM struct {
 	Address         string `gorm:"index:log_count_by_address_idx_address"`
-	Count           uint64
 	Id              uint64
 	LogIndex        uint64 `gorm:"index:log_count_by_address_idx_log_index"`
 	TransactionHash string `gorm:"index:log_count_by_address_idx_transaction_hash"`
@@ -46,7 +45,6 @@ func (m *LogCountByAddress) ToORM(ctx context.Context) (LogCountByAddressORM, er
 	to.LogIndex = m.LogIndex
 	to.TransactionHash = m.TransactionHash
 	to.Address = m.Address
-	to.Count = m.Count
 	to.Id = m.Id
 	if posthook, ok := interface{}(m).(LogCountByAddressWithAfterToORM); ok {
 		err = posthook.AfterToORM(ctx, &to)
@@ -67,7 +65,6 @@ func (m *LogCountByAddressORM) ToPB(ctx context.Context) (LogCountByAddress, err
 	to.LogIndex = m.LogIndex
 	to.TransactionHash = m.TransactionHash
 	to.Address = m.Address
-	to.Count = m.Count
 	to.Id = m.Id
 	if posthook, ok := interface{}(m).(LogCountByAddressWithAfterToPB); ok {
 		err = posthook.AfterToPB(ctx, &to)
@@ -389,10 +386,6 @@ func DefaultApplyFieldMaskLogCountByAddress(ctx context.Context, patchee *LogCou
 		}
 		if f == prefix+"Address" {
 			patchee.Address = patcher.Address
-			continue
-		}
-		if f == prefix+"Count" {
-			patchee.Count = patcher.Count
 			continue
 		}
 		if f == prefix+"Id" {
