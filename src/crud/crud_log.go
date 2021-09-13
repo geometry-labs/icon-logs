@@ -61,8 +61,6 @@ func (m *LogModel) Insert(log *models.Log) error {
 
 	db = db.Create(log)
 
-	zap.S().Debug("ALKJKLSJDKLJSLKDJSKLDJKLSDJKLSDJLKSDJKLSJDL: ", log.TransactionHash, " - ", log.LogIndex)
-
 	return db.Error
 }
 
