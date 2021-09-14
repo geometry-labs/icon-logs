@@ -162,8 +162,6 @@ func StartLogLoader() {
 			// Read transaction
 			newLog := <-postgresLoaderChan
 
-			newLog.LogCount = 10
-
 			// Update/Insert
 			_, err := GetLogModel().SelectOne(newLog.TransactionHash, newLog.LogIndex)
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -178,7 +176,6 @@ func StartLogLoader() {
 				// Postgress error
 				zap.S().Fatal(err.Error())
 			}
-
 		}
 	}()
 }
