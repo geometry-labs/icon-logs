@@ -3,7 +3,6 @@ package crud
 import (
 	"errors"
 	"sync"
-	"time"
 
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -163,28 +162,14 @@ func StartLogLoader() {
 			// Read transaction
 			newLog := <-postgresLoaderChan
 
+			newLog.LogCount = 10
+
 			// Update/Insert
 			_, err := GetLogModel().SelectOne(newLog.TransactionHash, newLog.LogIndex)
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 
 				// Insert
 				GetLogModel().Insert(newLog)
-
-				// Loop until verified
-				for true {
-
-					// Verify
-					_, err := GetLogModel().SelectOne(newLog.TransactionHash, newLog.LogIndex)
-					if errors.Is(err, gorm.ErrRecordNotFound) {
-						// Fail
-						time.Sleep(1)
-						continue
-					}
-
-					// Success
-					zap.S().Debug("Loader=Log, TransactionHash=", newLog.TransactionHash, " LogIndex=", newLog.LogIndex, " - Insert")
-					break
-				}
 			} else if err == nil {
 				// Update
 				GetLogModel().UpdateOne(newLog)
