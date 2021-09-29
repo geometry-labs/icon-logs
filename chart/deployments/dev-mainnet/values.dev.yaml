@@ -2,7 +2,7 @@ ingress:
   enabled: false
 api:
   image:
-    tag: '44'
+    tag: '45'
   annotations: |
     "consul.hashicorp.com/connect-inject": "true"
     "consul.hashicorp.com/transparent-proxy": "false"
@@ -16,7 +16,7 @@ worker:
   annotations: |
     "geometrylabs.io/logging": "true"
   image:
-    tag: '44'
+    tag: '45'
   kafka:
     topics:
       blocks: blocks-raw
